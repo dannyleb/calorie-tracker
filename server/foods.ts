@@ -6,7 +6,7 @@ import {
   type FoodItem,
   type NutrientKey,
   type Nutrients,
-} from '../../shared/types';
+} from '../shared/types';
 import type { FdcFood, PartialNutrients } from './usda';
 import { per100g, searchGeneric, titleCase } from './usda';
 import { offPer100g, type OffProduct } from './off';

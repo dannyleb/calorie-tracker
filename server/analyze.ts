@@ -1,8 +1,8 @@
 import type Anthropic from '@anthropic-ai/sdk';
-import type { AnalyzeResponse } from '../../shared/types';
-import { claudeJSON } from '../_lib/claude';
-import { resolveItem, type RawItem } from '../_lib/foods';
-import { HttpError, errorResponse, json, readJson, type Env } from '../_lib/http';
+import type { AnalyzeResponse } from '../shared/types';
+import { claudeJSON } from './claude';
+import { resolveItem, type RawItem } from './foods';
+import { HttpError, errorResponse, json, readJson, type Env } from './http';
 
 const NUTRIENT_SCHEMA = {
   type: 'object',
@@ -88,7 +88,7 @@ interface Body {
   text?: string;
 }
 
-export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
+export async function analyze(request: Request, env: Env): Promise<Response> {
   try {
     const body = await readJson<Body>(request, 8_000_000);
     const content: Anthropic.Beta.BetaContentBlockParam[] = [];
@@ -115,4 +115,4 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   } catch (err) {
     return errorResponse(err);
   }
-};
+}

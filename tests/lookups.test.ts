@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { resolveItem } from '../functions/_lib/foods';
-import { findOff } from '../functions/_lib/off';
-import { findBranded } from '../functions/_lib/usda';
+import { resolveItem } from '../server/foods';
+import { findOff } from '../server/off';
+import { findBranded } from '../server/usda';
 import { emptyNutrients } from '../shared/types';
 
 const nut = (nutrientNumber: string, value: number, unitName = 'G') => ({ nutrientNumber, value, unitName });

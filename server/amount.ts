@@ -1,6 +1,6 @@
-import type { AmountResponse } from '../../shared/types';
-import { claudeJSON } from '../_lib/claude';
-import { HttpError, errorResponse, json, readJson, type Env } from '../_lib/http';
+import type { AmountResponse } from '../shared/types';
+import { claudeJSON } from './claude';
+import { HttpError, errorResponse, json, readJson, type Env } from './http';
 
 const SCHEMA = {
   type: 'object',
@@ -23,7 +23,7 @@ interface Body {
   text?: string;
 }
 
-export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
+export async function amount(request: Request, env: Env): Promise<Response> {
   try {
     const body = await readJson<Body>(request, 10_000);
     const text = body.text?.trim().slice(0, 300);
@@ -42,4 +42,4 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   } catch (err) {
     return errorResponse(err);
   }
-};
+}

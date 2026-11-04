@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { foodFromFdc, foodFromOff, plausible, resolveItem, scalePer100 } from '../functions/_lib/foods';
-import { offPer100g } from '../functions/_lib/off';
-import { codeVariants, per100g, titleCase, upcEtoA, type FdcFood } from '../functions/_lib/usda';
+import { foodFromFdc, foodFromOff, plausible, resolveItem, scalePer100 } from '../server/foods';
+import { offPer100g } from '../server/off';
+import { codeVariants, per100g, titleCase, upcEtoA, type FdcFood } from '../server/usda';
 import { parseAmountLocal } from '../src/lib/amount';
 import { describeAmount, fmtQty, fmtValue } from '../src/lib/format';
 import { buckets, periodRange, summarize, topContributors, totalsByDay } from '../src/lib/stats';

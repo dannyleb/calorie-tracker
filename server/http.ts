@@ -11,6 +11,8 @@ export interface Env {
   CLAUDE_EFFORT?: string;
   /** Optional. Route Claude calls through a proxy such as Cloudflare AI Gateway. */
   ANTHROPIC_BASE_URL?: string;
+  /** The built app (dist/), bound in wrangler.jsonc. */
+  ASSETS: { fetch(request: Request): Promise<Response> };
 }
 
 export class HttpError extends Error {

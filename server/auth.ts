@@ -1,4 +1,4 @@
-import { json, type Env } from '../_lib/http';
+import { json, type Env } from './http';
 
 // Every /api/* request must carry the passcode set in APP_PASSCODE.
 // This keeps strangers from spending your Anthropic credit if they find the URL.
@@ -14,14 +14,15 @@ async function safeEqual(a: string, b: string): Promise<boolean> {
   return diff === 0;
 }
 
-export const onRequest: PagesFunction<Env> = async (ctx) => {
-  const expected = ctx.env.APP_PASSCODE;
+/** Returns an error response if the passcode is missing or wrong, otherwise null. */
+export async function checkPasscode(request: Request, env: Env): Promise<Response | null> {
+  const expected = env.APP_PASSCODE;
   if (!expected) {
     return json({ error: 'Server not set up: add the APP_PASSCODE secret in Cloudflare.' }, 503);
   }
-  const given = ctx.request.headers.get('x-app-passcode') || '';
+  const given = request.headers.get('x-app-passcode') || '';
   if (!(await safeEqual(given, expected))) {
     return json({ error: 'Wrong or missing passcode. Set it in Settings.' }, 401);
   }
-  return ctx.next();
-};
+  return null;
+}

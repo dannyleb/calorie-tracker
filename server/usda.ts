@@ -1,7 +1,7 @@
 // USDA FoodData Central (https://fdc.nal.usda.gov/api-guide)
 // All FDC nutrient values in search results are per 100 g (or 100 ml).
 
-import { NUTRIENT_KEYS, type NutrientKey } from '../../shared/types';
+import { NUTRIENT_KEYS, type NutrientKey } from '../shared/types';
 import { fetchWithTimeout } from './http';
 
 const SEARCH_URL = 'https://api.nal.usda.gov/fdc/v1/foods/search';

@@ -1,10 +1,10 @@
-import type { BarcodeResponse } from '../../shared/types';
-import { foodFromFdc, foodFromOff } from '../_lib/foods';
-import { HttpError, errorResponse, json, type Env } from '../_lib/http';
-import { findOff } from '../_lib/off';
-import { findBranded } from '../_lib/usda';
+import type { BarcodeResponse } from '../shared/types';
+import { foodFromFdc, foodFromOff } from './foods';
+import { HttpError, errorResponse, json, type Env } from './http';
+import { findOff } from './off';
+import { findBranded } from './usda';
 
-export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
+export async function barcode(request: Request, env: Env): Promise<Response> {
   try {
     const code = new URL(request.url).searchParams.get('code')?.trim() ?? '';
     if (!/^\d{6,14}$/.test(code)) throw new HttpError(400, 'That barcode does not look valid.');
@@ -29,4 +29,4 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
   } catch (err) {
     return errorResponse(err);
   }
-};
+}

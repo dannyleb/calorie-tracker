@@ -25,17 +25,16 @@ It's a web app you install to your home screen (a PWA). You don't need the App S
 1. **Anthropic (Claude):** sign in at [platform.claude.com](https://platform.claude.com), add billing, create an API key, and **set a monthly spend limit** (e.g. $20).
 2. **USDA FoodData Central** (free): sign up at [api.data.gov/signup](https://api.data.gov/signup/) and the key is emailed to you. Without it the app still works, but nutrients come from AI estimates instead of USDA data.
 
-### 2. Deploy on Cloudflare Pages (free)
+### 2. Deploy on Cloudflare Workers (free)
 Cloudflare's menus change from time to time, so these names may differ slightly.
 
 1. Create a free account at [dash.cloudflare.com](https://dash.cloudflare.com).
-2. Go to **Workers & Pages → Create → Pages → Connect to Git**, authorize GitHub, and pick `dannyleb/calorie-tracker`.
-3. Build settings:
-   - Framework preset: **None** (or Vite)
-   - Build command: `npm run build`
-   - Build output directory: `dist`
-4. Deploy. You'll get a URL like `https://calorie-tracker-xxx.pages.dev`.
-5. In the project, open **Settings → Variables and Secrets** (Production) and add these, each as a **Secret**:
+2. Go to **Workers & Pages → Create → Import a repository**, connect GitHub, and pick `dannyleb/calorie-tracker`.
+   - Keep the Worker name **`calorie-tracker`**. It must match `name` in `wrangler.jsonc`; if you use another name, change it there too.
+   - Build command: `npm run build` (or leave it empty: `wrangler.jsonc` runs the build anyway).
+   - Deploy command: `npx wrangler deploy` (the default).
+3. Deploy. You'll get a URL like `https://calorie-tracker.<your-account>.workers.dev`.
+4. In the Worker, open **Settings → Variables and Secrets** and add these, each as a **Secret**:
 
    | Name | Value |
    |---|---|
@@ -45,12 +44,12 @@ Cloudflare's menus change from time to time, so these names may differ slightly.
    | `CLAUDE_MODEL` *(optional)* | defaults to `claude-opus-5-5` |
    | `CLAUDE_EFFORT` *(optional)* | `low` (default, fastest), `medium` or `high` |
 
-6. **Redeploy** (Deployments → latest → Retry deployment) so the new variables take effect.
+   Secrets take effect right away; no redeploy needed.
 
 From now on, every push to `main` redeploys automatically.
 
 ### 3. Install on your iPhone
-1. Open your `pages.dev` URL in **Safari**.
+1. Open your `workers.dev` URL in **Safari**.
 2. Tap **Share → Add to Home Screen**.
 3. Open the app from the new icon, go to **Settings**, enter your passcode and tap **Save and test**. It should say "Connected".
 
@@ -64,7 +63,7 @@ You pay Anthropic per AI call; everything else is free. Rough estimate at ~10 ph
 | `claude-sonnet-5-5` | ~$0.01 | ~$3–5 |
 | `claude-haiku-5-5` | < $0.001 | < $1 |
 
-Barcode scans that are found in the databases and "Recent" re-adds don't call the AI at all. To switch models, change `CLAUDE_MODEL` in Cloudflare and redeploy.
+Barcode scans that are found in the databases and "Recent" re-adds don't call the AI at all. To switch models, change `CLAUDE_MODEL` in the Worker's Variables and Secrets.
 
 ## Your data
 
@@ -81,12 +80,13 @@ The default targets follow common guidance for high LDL: saturated fat under ~13
 ```bash
 npm install
 cp .dev.vars.example .dev.vars   # fill in your keys
-npm run cf:dev                   # app + API at http://localhost:8788
+npm run cf:dev                   # app + API at http://localhost:8787
 ```
 
 - `npm test`: unit tests (nutrition math, barcode handling, USDA/Open Food Facts parsing, amount parsing, trends)
 - `npm run typecheck`: TypeScript checks for the app and the API
-- `npm run dev`: front-end only, with hot reload (proxies `/api` to `cf:dev` on port 8788)
+- `npm run dev`: front-end only, with hot reload (proxies `/api` to `cf:dev` on port 8787)
+- `npm run deploy`: deploy from your computer instead of via GitHub (needs `npx wrangler login`)
 
 ## How it's built
 
@@ -94,11 +94,13 @@ npm run cf:dev                   # app + API at http://localhost:8788
 src/                 Phone app (Preact + TypeScript, ~22 KB gzipped)
   components/        Today, Trends, Settings, review/edit sheets, bar chart
   lib/               IndexedDB storage, image resizing, barcode detection, stats
-functions/api/       Cloudflare Pages Functions (the server)
+worker/index.ts      Cloudflare Worker entry: /api/* → server, everything else → the app
+server/              API code
+  router.ts          Passcode check, then routes /api/* requests
   analyze.ts         Photo/text → Claude (structured JSON) → USDA lookup
   barcode.ts         Barcode → USDA branded foods → Open Food Facts
   amount.ts          "half a cup" → quantity
-  _middleware.ts     Passcode check for every /api route
+wrangler.jsonc       Worker config (build, static files, routing)
 shared/types.ts      Nutrient types used by both sides
 tests/               Vitest unit tests
 ```

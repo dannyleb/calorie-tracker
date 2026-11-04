@@ -34,6 +34,6 @@ export default defineConfig({
   ],
   server: {
     // `npm run dev` serves only the front end. Use `npm run cf:dev` to run the API too.
-    proxy: { '/api': 'http://localhost:8788' },
+    proxy: { '/api': 'http://localhost:8787' },
   },
 });
