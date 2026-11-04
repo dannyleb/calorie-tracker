@@ -1,0 +1,7 @@
+# Copy to .dev.vars for local development (`npm run cf:dev`). Never commit .dev.vars.
+ANTHROPIC_API_KEY=sk-ant-...
+APP_PASSCODE=pick-something-long
+USDA_API_KEY=your-api-data-gov-key
+# Optional
+# CLAUDE_MODEL=claude-opus-5-5
+# CLAUDE_EFFORT=low

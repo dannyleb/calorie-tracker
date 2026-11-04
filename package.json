@@ -1,0 +1,31 @@
+{
+  "name": "calorie-tracker",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p functions/tsconfig.json --noEmit",
+    "test": "vitest run",
+    "cf:dev": "npm run build && wrangler pages dev dist --compatibility-date=2026-10-01"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^1.4.0",
+    "idb": "^8.0.4",
+    "preact": "^11.1.1",
+    "zxing-wasm": "^3.1.6"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20261104.1",
+    "@preact/preset-vite": "^2.10.6",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.5",
+    "vite-plugin-pwa": "^2.0.0",
+    "vitest": "^5.1.0",
+    "wrangler": "^4.157.0"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}
