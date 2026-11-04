@@ -29,6 +29,10 @@ async function call<T>(path: string, init: RequestInit = {}): Promise<T> {
     /* non-JSON */
   }
   if (!res.ok) throw new ApiError(body?.error || `Server error (${res.status}).`, res.status);
+  if (body === null) {
+    // e.g. the static site answered instead of the API (mid-deploy or misconfigured)
+    throw new ApiError("The server didn't answer as expected. If you just deployed, wait a minute and try again.", res.status);
+  }
   return body as T;
 }
 
