@@ -99,11 +99,11 @@ export function Settings({
     }
     try {
       const backup = JSON.parse(await file.text()) as Backup;
-      const { imported, skipped } = await importAll(backup);
+      const { imported, skipped, recipes } = await importAll(backup);
       const s = backup.settings as { targets?: unknown } | undefined;
       const targets = sanitizeTargets(s?.targets);
       if (Object.keys(targets).length) onChange({ ...settings, targets: { ...settings.targets, ...targets } });
-      notify(`Restored ${imported} entries.${skipped ? ` Skipped ${skipped} damaged ones.` : ''}`);
+      notify(`Restored ${imported} entries${recipes ? ` and ${recipes} recipe${recipes === 1 ? '' : 's'}` : ''}.${skipped ? ` Skipped ${skipped} damaged entries.` : ''}`);
       setCount(await countEntries());
       onDataChanged();
     } catch (err) {

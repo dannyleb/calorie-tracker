@@ -3,25 +3,36 @@ import type { FoodItem } from '../shared/types';
 import { EditSheet } from './components/EditSheet';
 import { Icon } from './components/Icon';
 import { RecentSheet } from './components/RecentSheet';
+import { Recipes } from './components/Recipes';
 import { ReviewSheet, type ReviewState } from './components/ReviewSheet';
 import { Settings } from './components/Settings';
 import { TextSheet } from './components/TextSheet';
 import { Toast, type ToastState } from './components/Toast';
 import { Today } from './components/Today';
 import { Trends } from './components/Trends';
-import { analyzePhoto, analyzeText, lookupBarcode } from './lib/api';
-import { detectBarcode } from './lib/barcode';
+import { analyzeText } from './lib/api';
+import { identifyPhoto } from './lib/capture';
 import { dayLabel, todayKey } from './lib/dates';
-import { deleteEntries, entriesForDate, logFoods, requestPersistence, updateEntry, type Entry, type SavedFood } from './lib/db';
-import { blobToBase64, canvasToBlob, drawScaled, loadImage } from './lib/image';
+import {
+  allRecipes,
+  deleteEntries,
+  entriesForDate,
+  logFoods,
+  requestPersistence,
+  updateEntry,
+  type Entry,
+  type SavedFood,
+} from './lib/db';
+import { fmtQty } from './lib/format';
+import { recipeName, recipeServingFood, type Recipe } from './lib/recipes';
 import { loadSettings, saveSettings, type Settings as SettingsT } from './lib/settings';
 
-type Tab = 'today' | 'trends' | 'settings';
+type Tab = 'today' | 'recipes' | 'trends' | 'settings';
 type SheetState =
   | null
   | { type: 'review'; id: number; review: ReviewState }
   | { type: 'text' }
-  | { type: 'recent' }
+  | { type: 'recent'; recipes: Recipe[] }
   | { type: 'edit'; entry: Entry };
 
 export function App() {
@@ -86,36 +97,15 @@ export function App() {
   async function onPhoto(file: File) {
     const id = ++job.current;
     const show = (review: ReviewState) => job.current === id && setSheet({ type: 'review', id, review });
-    show({ status: 'working', message: 'Reading photo…' });
+    let thumb: string | undefined;
     try {
-      const img = await loadImage(file);
-      const forAi = drawScaled(img, 1280);
-      const blob = await canvasToBlob(forAi);
-      const thumb = URL.createObjectURL(blob);
-      show({ status: 'working', thumb, message: 'Checking for a barcode…' });
-
-      let note = '';
-      const code = await detectBarcode(drawScaled(img, 2000)).catch(() => null);
-      if (code) {
-        show({ status: 'working', thumb, message: `Looking up barcode ${code}…` });
-        const r = await lookupBarcode(code);
-        if (r.found && r.food) {
-          show({ status: 'ready', thumb, note: `Barcode ${code}`, items: [r.food] });
-          return;
-        }
-        note = `Barcode ${code} isn't in the food databases, so this is an AI read of the photo. A photo of the Nutrition Facts label is more accurate.`;
-      }
-
-      show({ status: 'working', thumb, message: 'Identifying food…' });
-      const res = await analyzePhoto(await blobToBase64(blob));
-      show({
-        status: 'ready',
-        thumb,
-        note: [note, res.note].filter(Boolean).join(' '),
-        items: res.items,
+      const res = await identifyPhoto(file, 'log', (message, t) => {
+        thumb = t ?? thumb;
+        show({ status: 'working', message, thumb });
       });
+      show({ status: 'ready', thumb: res.thumb, note: res.note, items: res.items });
     } catch (err) {
-      show({ status: 'error', message: (err as Error).message || 'Something went wrong.' });
+      show({ status: 'error', thumb, message: (err as Error).message || 'Something went wrong.' });
     }
   }
 
@@ -145,6 +135,24 @@ export function App() {
     });
   }
 
+  /** Log servings of a recipe (a snapshot of its current nutrition) to the selected day. */
+  async function logRecipe(r: Recipe, servings: number, goToToday = false) {
+    const ids = await logFoods([{ food: recipeServingFood(r), qty: servings }], date);
+    refresh();
+    if (goToToday) setTab('today');
+    setToast({
+      id: Date.now(),
+      message: `Added ${fmtQty(servings)} serving${servings === 1 ? '' : 's'} of ${recipeName(r)}`,
+      actionLabel: 'Undo',
+      onAction: async () => {
+        await deleteEntries(ids);
+        refresh();
+      },
+    });
+  }
+
+  const toastFn = (t: Omit<ToastState, 'id'>) => setToast({ ...t, id: Date.now() });
+
   const fileInput = (e: Event) => {
     const input = e.target as HTMLInputElement;
     const file = input.files?.[0];
@@ -165,6 +173,9 @@ export function App() {
             targets={settings.targets}
             onEdit={(entry) => setSheet({ type: 'edit', entry })}
           />
+        )}
+        {tab === 'recipes' && (
+          <Recipes dayLabel={label} version={version} toast={toastFn} onLog={(r, n, fromEditor) => logRecipe(r, n, fromEditor)} />
         )}
         {tab === 'trends' && <Trends targets={settings.targets} version={version} />}
         {tab === 'settings' && (
@@ -188,7 +199,7 @@ export function App() {
             <Icon name="mic" />
             <span>Say it</span>
           </button>
-          <button class="add-btn" onClick={() => setSheet({ type: 'recent' })}>
+          <button class="add-btn" onClick={async () => setSheet({ type: 'recent', recipes: await allRecipes() })}>
             <Icon name="clock" />
             <span>Recent</span>
           </button>
@@ -199,6 +210,7 @@ export function App() {
         {(
           [
             ['today', 'today', 'Today'],
+            ['recipes', 'recipes', 'Recipes'],
             ['trends', 'trends', 'Trends'],
             ['settings', 'settings', 'Settings'],
           ] as [Tab, string, string][]
@@ -221,7 +233,9 @@ export function App() {
         />
       )}
       {sheet?.type === 'text' && <TextSheet onSubmit={onText} onClose={closeSheet} />}
-      {sheet?.type === 'recent' && <RecentSheet onPick={onPickRecent} onClose={closeSheet} />}
+      {sheet?.type === 'recent' && (
+        <RecentSheet recipes={sheet.recipes} onPick={onPickRecent} onPickRecipe={(r) => logRecipe(r, 1)} onClose={closeSheet} />
+      )}
       {sheet?.type === 'edit' && (
         <EditSheet
           entry={sheet.entry}

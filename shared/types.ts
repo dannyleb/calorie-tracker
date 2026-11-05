@@ -31,7 +31,7 @@ export const NUTRIENT_INFO: Record<NutrientKey, { label: string; short: string; 
   sodium: { label: 'Sodium', short: 'Sodium', unit: 'mg' },
 };
 
-export type FoodSource = 'usda' | 'label' | 'barcode' | 'ai';
+export type FoodSource = 'usda' | 'label' | 'barcode' | 'ai' | 'recipe';
 
 /** One loggable food. Nutrients are for exactly one `unit`. */
 export interface FoodItem {
@@ -54,7 +54,13 @@ export interface AnalyzeResponse {
   kind: 'food' | 'nutrition_label' | 'packaged_product' | 'not_food';
   note: string;
   items: FoodItem[];
+  /** Recipe mode only: name and servings if the user said them or the photo shows them. */
+  recipeName?: string;
+  servings?: number;
 }
+
+/** 'log' = what I ate; 'recipe' = ingredients going into a recipe. */
+export type AnalyzeMode = 'log' | 'recipe';
 
 export interface BarcodeResponse {
   found: boolean;
@@ -107,19 +113,22 @@ export const MAX_PER_100G: Record<NutrientKey, number> = {
   sodium: 40000, // mg; table salt ~38,800
 };
 
-/** Highest believable value for one logged unit (a very large serving). */
+/** Heaviest believable single unit: a big-batch recipe ingredient (e.g. a 10 kg sack of flour). */
+export const MAX_UNIT_GRAMS = 20000;
+
+/** Highest believable value for one unit, i.e. MAX_UNIT_GRAMS of the densest food. */
 const MAX_PER_UNIT: Record<NutrientKey, number> = {
-  calories: 10000,
-  protein: 1000,
-  carbs: 1000,
-  fat: 1000,
-  satFat: 1000,
-  transFat: 1000,
-  cholesterol: 20000,
-  fiber: 1000,
-  solubleFiber: 1000,
-  sugar: 1000,
-  sodium: 100000,
+  calories: 180000,
+  protein: 20000,
+  carbs: 20000,
+  fat: 20000,
+  satFat: 20000,
+  transFat: 20000,
+  cholesterol: 700000,
+  fiber: 20000,
+  solubleFiber: 20000,
+  sugar: 20000,
+  sodium: 8000000,
 };
 
 /** Plain text: no control characters, trimmed, length-capped. */
@@ -135,7 +144,7 @@ export function sanitizeNutrients(raw: Partial<Record<NutrientKey, unknown>> | u
   return out;
 }
 
-const SOURCES: FoodSource[] = ['usda', 'label', 'barcode', 'ai'];
+const SOURCES: FoodSource[] = ['usda', 'label', 'barcode', 'ai', 'recipe'];
 const CONFIDENCE = ['high', 'medium', 'low'] as const;
 
 /** Rebuild a FoodItem from untrusted input, keeping only well-formed fields. Returns null if unusable. */
@@ -144,7 +153,7 @@ export function sanitizeFood(raw: unknown): FoodItem | null {
   const f = raw as Record<string, unknown>;
   const name = cleanText(f.name, 100);
   if (!name) return null;
-  const grams = Math.min(num(f.unitGrams), 5000);
+  const grams = Math.min(num(f.unitGrams), MAX_UNIT_GRAMS);
   const food: FoodItem = {
     name,
     unit: cleanText(f.unit, 120) || '1 serving',

@@ -467,6 +467,9 @@ h3 {
   font-size: 16px;
   background: var(--accent);
   color: #fff;
+  border: 0;
+  padding: 0 10px;
+  white-space: nowrap;
 }
 
 .add-btn {
@@ -823,6 +826,150 @@ h3 {
 .fav-toggle.on svg,
 .star.on svg {
   color: #eda100;
+}
+
+/* ---------- Recipes ---------- */
+
+.new-recipe {
+  margin-bottom: 12px;
+}
+
+.recipe-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.recipe-row .entry {
+  flex: 1;
+  min-width: 0;
+}
+
+.log-btn {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 36px;
+  padding: 0 12px;
+  border-radius: 18px;
+  border: 0;
+  background: var(--chip);
+  color: var(--accent-ink);
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.recipe-editor {
+  padding-bottom: calc(var(--addbar-h) + 8px);
+}
+
+.editor-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 0 10px;
+}
+
+.back-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  background: none;
+  border: 0;
+  padding: 8px 8px 8px 0;
+  color: var(--accent-ink);
+  font-size: 17px;
+}
+
+.save-state {
+  font-size: 13px;
+}
+
+.title-input {
+  width: 100%;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  background: none;
+  font-size: 22px;
+  font-weight: 650;
+  padding: 4px 0 10px;
+  margin-bottom: 8px;
+}
+
+.title-input:focus {
+  outline: none;
+  border-bottom-color: var(--accent);
+}
+
+.row-between {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 0;
+}
+
+.grams-input {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+}
+
+.grams-input input {
+  width: 96px;
+  height: 40px;
+  border: 1px solid var(--line);
+  background: var(--page);
+  border-radius: 12px;
+  padding: 0 10px;
+  font-size: 16px;
+  text-align: right;
+  color: var(--ink);
+}
+
+.pad-top {
+  padding-top: 12px;
+  margin-bottom: 4px;
+}
+
+.entries li.fresh {
+  animation: fresh 1.6s ease;
+}
+
+@keyframes fresh {
+  from {
+    background: color-mix(in srgb, var(--accent) 16%, transparent);
+  }
+}
+
+.log-recipe .primary-btn {
+  margin-top: 8px;
+}
+
+.delete-recipe {
+  margin: 4px 0 12px;
+}
+
+.addbar.recipe-bar {
+  grid-template-columns: 2fr 1fr 1fr;
+}
+
+.recipe-bar .add-camera {
+  font-size: 15px;
+}
+
+.strong-hint {
+  color: var(--ink-2);
+  font-weight: 500;
+}
+
+.list-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink-2);
+  margin: 8px 0 2px;
 }
 
 /* ---------- Recent ---------- */

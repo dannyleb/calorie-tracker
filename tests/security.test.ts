@@ -164,7 +164,7 @@ describe('untrusted data', () => {
     expect(f.unitGrams).toBeNull();
     expect(f.perUnit.calories).toBe(120);
     expect(f.perUnit.satFat).toBe(0);
-    expect(f.perUnit.cholesterol).toBe(20000);
+    expect(f.perUnit.cholesterol).toBe(700000);
     expect(f.source).toBe('ai');
     expect(f.confidence).toBeUndefined();
     expect(f.missing).toEqual(['satFat']);

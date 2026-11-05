@@ -1,7 +1,25 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { Sheet } from './Sheet';
 
-export function TextSheet({ onSubmit, onClose }: { onSubmit: (text: string) => void; onClose: () => void }) {
+export function TextSheet({
+  onSubmit,
+  onClose,
+  title = 'What did you eat?',
+  placeholder = 'e.g. two scrambled eggs, a slice of whole wheat toast with butter, and a coffee with milk',
+  hint = 'Tap the microphone on your keyboard to dictate. Include amounts if you know them.',
+  submitLabel = 'Analyze',
+  maxLength = 1000,
+  rows = 4,
+}: {
+  onSubmit: (text: string) => void;
+  onClose: () => void;
+  title?: string;
+  placeholder?: string;
+  hint?: string;
+  submitLabel?: string;
+  maxLength?: number;
+  rows?: number;
+}) {
   const [text, setText] = useState('');
   const ref = useRef<HTMLTextAreaElement>(null);
   useEffect(() => {
@@ -12,27 +30,27 @@ export function TextSheet({ onSubmit, onClose }: { onSubmit: (text: string) => v
 
   return (
     <Sheet
-      title="What did you eat?"
+      title={title}
       onClose={onClose}
       footer={
         <button class="primary-btn" disabled={!text.trim()} onClick={submit}>
-          Analyze
+          {submitLabel}
         </button>
       }
     >
       <textarea
         ref={ref}
         class="big-input"
-        rows={4}
-        maxLength={1000}
-        placeholder="e.g. two scrambled eggs, a slice of whole wheat toast with butter, and a coffee with milk"
+        rows={rows}
+        maxLength={maxLength}
+        placeholder={placeholder}
         value={text}
         onInput={(e) => setText((e.target as HTMLTextAreaElement).value)}
         onKeyDown={(e) => {
           if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) submit();
         }}
       />
-      <p class="hint">Tap the microphone on your keyboard to dictate. Include amounts if you know them.</p>
+      <p class="hint">{hint}</p>
     </Sheet>
   );
 }

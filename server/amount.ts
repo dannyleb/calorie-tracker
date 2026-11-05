@@ -1,4 +1,4 @@
-import { cleanText, num, type AmountResponse } from '../shared/types';
+import { MAX_UNIT_GRAMS, cleanText, num, type AmountResponse } from '../shared/types';
 import { claudeJSON } from './claude';
 import { HttpError, errorResponse, json, readJson, type Env } from './http';
 
@@ -28,7 +28,7 @@ export async function amount(request: Request, env: Env): Promise<Response> {
     const body = await readJson<Body>(request, 10_000);
     const text = cleanText(body.text, 200);
     if (!text) throw new HttpError(400, 'Say or type an amount.');
-    const grams = Math.min(num(body.unitGrams), 5000);
+    const grams = Math.min(num(body.unitGrams), MAX_UNIT_GRAMS);
     const ref = `${cleanText(body.name, 100) || 'Food'}, reference portion = ${cleanText(body.unit, 120) || '1 serving'}${
       grams ? ` (${Math.round(grams)} g)` : ''
     }`;
@@ -38,7 +38,7 @@ export async function amount(request: Request, env: Env): Promise<Response> {
       schema: SCHEMA,
     });
     const m = Number(out.multiplier);
-    if (!Number.isFinite(m) || m <= 0 || m > 100) throw new HttpError(422, "Couldn't understand that amount.");
+    if (!Number.isFinite(m) || m <= 0 || m > 1000) throw new HttpError(422, "Couldn't understand that amount.");
     return json({ multiplier: m, note: cleanText(out.note, 120) } satisfies AmountResponse);
   } catch (err) {
     return errorResponse(err);

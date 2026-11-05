@@ -53,5 +53,8 @@ export function parseAmountLocal(text: string, unitGrams: number | null): number
     .replace(/^(a|an) (half|third|quarter)$/, '$2')
     .trim();
   const v = parseNumber(stripped);
-  return v && v > 0 && v <= 100 ? v : null;
+  if (!v || v <= 0) return null;
+  // A bare number like "200" means grams, not 200 servings.
+  if (unitGrams && v > 20 && /^\d+(\.\d+)?$/.test(stripped)) return v / unitGrams;
+  return v <= 1000 ? v : null;
 }

@@ -2,6 +2,7 @@ import {
   cleanText,
   sanitizeFood,
   type AmountResponse,
+  type AnalyzeMode,
   type AnalyzeResponse,
   type BarcodeResponse,
   type FoodItem,
@@ -45,18 +46,23 @@ async function call<T>(path: string, init: RequestInit = {}): Promise<T> {
 
 // Server data is re-validated here before it is shown or saved (defense in depth).
 function cleanAnalyze(r: AnalyzeResponse): AnalyzeResponse {
-  return {
+  const out: AnalyzeResponse = {
     kind: r.kind,
     note: cleanText(r.note, 300),
     items: (Array.isArray(r.items) ? r.items : []).map(sanitizeFood).filter((f): f is FoodItem => f !== null),
   };
+  const name = cleanText(r.recipeName, 100);
+  if (name) out.recipeName = name;
+  const servings = Number(r.servings);
+  if (Number.isInteger(servings) && servings >= 1 && servings <= 100) out.servings = servings;
+  return out;
 }
 
-export const analyzePhoto = (image: string, note?: string) =>
-  call<AnalyzeResponse>('/api/analyze', { method: 'POST', body: JSON.stringify({ image, text: note }) }).then(cleanAnalyze);
+export const analyzePhoto = (image: string, mode: AnalyzeMode = 'log', note?: string) =>
+  call<AnalyzeResponse>('/api/analyze', { method: 'POST', body: JSON.stringify({ image, text: note, mode }) }).then(cleanAnalyze);
 
-export const analyzeText = (text: string) =>
-  call<AnalyzeResponse>('/api/analyze', { method: 'POST', body: JSON.stringify({ text }) }).then(cleanAnalyze);
+export const analyzeText = (text: string, mode: AnalyzeMode = 'log') =>
+  call<AnalyzeResponse>('/api/analyze', { method: 'POST', body: JSON.stringify({ text, mode }) }).then(cleanAnalyze);
 
 export const lookupBarcode = (code: string) =>
   call<BarcodeResponse>(`/api/barcode?code=${encodeURIComponent(code)}`).then((r) => {
@@ -70,7 +76,7 @@ export const parseAmount = (food: FoodItem, text: string) =>
     body: JSON.stringify({ name: food.name, unit: food.unit, unitGrams: food.unitGrams, text }),
   }).then((r) => {
     const m = Number(r.multiplier);
-    if (!Number.isFinite(m) || m <= 0 || m > 100) throw new ApiError("Couldn't understand that amount.", 422);
+    if (!Number.isFinite(m) || m <= 0 || m > 1000) throw new ApiError("Couldn't understand that amount.", 422);
     return { multiplier: m, note: cleanText(r.note, 120) };
   });
 

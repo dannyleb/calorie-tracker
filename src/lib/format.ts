@@ -41,4 +41,5 @@ export const SOURCE_LABEL: Record<FoodItem['source'], string> = {
   label: 'Label',
   barcode: 'Barcode',
   ai: 'AI estimate',
+  recipe: 'Recipe',
 };

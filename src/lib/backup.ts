@@ -1,5 +1,6 @@
 import { NUTRIENT_KEYS, cleanText, sanitizeFood, type NutrientKey } from '../../shared/types';
 import type { Entry, SavedFood } from './db';
+import type { Ingredient, Recipe } from './recipes';
 import type { Targets } from './settings';
 
 export const MAX_BACKUP_BYTES = 50 * 1024 * 1024;
@@ -15,7 +16,7 @@ export function sanitizeEntry(raw: unknown): Entry | null {
   const id = cleanText(e.id, 100);
   const date = typeof e.date === 'string' && DATE.test(e.date) ? e.date : null;
   const ts = finite(e.ts, 0, 8.64e15);
-  const qty = finite(e.qty, 0.001, 100);
+  const qty = finite(e.qty, 0.001, 1000);
   const food = sanitizeFood(e.food);
   if (!id || !date || ts === null || qty === null || !food) return null;
   return { id, date, ts, qty, food };
@@ -46,4 +47,30 @@ export function sanitizeTargets(raw: unknown): Targets {
     if (v !== null) out[k as NutrientKey] = v;
   }
   return out;
+}
+
+/** Rebuild a recipe from a backup file, or null if it isn't valid. */
+export function sanitizeRecipe(raw: unknown): Recipe | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const r = raw as Record<string, unknown>;
+  const id = cleanText(r.id, 100);
+  if (!id) return null;
+  const ingredients: Ingredient[] = [];
+  for (const [i, x] of (Array.isArray(r.ingredients) ? r.ingredients.slice(0, 200) : []).entries()) {
+    if (!x || typeof x !== 'object') continue;
+    const ing = x as Record<string, unknown>;
+    const food = sanitizeFood(ing.food);
+    const qty = finite(ing.qty, 0.001, 1000);
+    if (food && qty !== null) ingredients.push({ id: cleanText(ing.id, 100) || `${id}-${i}`, food, qty });
+  }
+  const now = Date.now();
+  return {
+    id,
+    name: cleanText(r.name, 100),
+    servings: Math.round(finite(r.servings, 1, 100) ?? 1),
+    cookedGrams: finite(r.cookedGrams, 1, 100000),
+    ingredients,
+    createdAt: finite(r.createdAt, 0, 8.64e15) ?? now,
+    updatedAt: finite(r.updatedAt, 0, 8.64e15) ?? now,
+  };
 }

@@ -15,6 +15,12 @@ It's a web app you install to your home screen (a PWA). You don't need the App S
 | Recent & favorites | One tap re-adds a food with the amount you used last time | Exact |
 
 - **Amounts:** use the − / + buttons, or say or type an amount ("half a cup", "150 g", "2"). Simple amounts are worked out on the phone; anything else goes to Claude.
+- **Recipes:** build a recipe once, then log a serving with one tap (from the Recipes tab or Recent). Add ingredients by:
+  - **Saying them:** "2 cups flour, 1 cup sugar, 3 eggs, a stick of butter, a teaspoon of salt". Claude converts kitchen measures to grams, and USDA supplies nutrients for staples like flour and sugar. You can also paste a whole recipe.
+  - **Photo:** of an ingredient's package or barcode (then say how much the recipe uses), or of a written recipe (cookbook page, card, screenshot) to pull in every ingredient at once.
+  - **Recent:** foods you've logged before.
+
+  Set servings, and optionally the cooked weight of the finished dish so servings can be logged in grams. Nutrition per serving updates as you go, and recipes save automatically. Logged servings are a snapshot, so editing a recipe later doesn't change past days.
 - **Today:** calories plus heart-health meters (saturated fat, cholesterol, fiber with estimated soluble fiber, sodium) and macros. Use ‹ › to view or log past days.
 - **Trends:** week / month / quarter / year. Shows averages per logged day with change vs. the prior period, days over each limit, a bar chart with your target line, top food sources of any nutrient, and a totals table.
 - **Data:** stored only on your phone for now. Settings has backup (JSON), CSV export and restore.
@@ -118,7 +124,7 @@ src/                 Phone app (Preact + TypeScript, ~22 KB gzipped)
 worker/index.ts      Cloudflare Worker entry: /api/* → server, everything else → the app
 server/              API code
   router.ts          Passcode check, then routes /api/* requests
-  analyze.ts         Photo/text → Claude (structured JSON) → USDA lookup
+  analyze.ts         Photo/text → Claude (structured JSON) → USDA lookup; "recipe" mode for ingredients
   barcode.ts         Barcode → USDA branded foods → Open Food Facts
   amount.ts          "half a cup" → quantity
 wrangler.jsonc       Worker config (build, static files, routing)

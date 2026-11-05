@@ -1,4 +1,5 @@
 import {
+  MAX_UNIT_GRAMS,
   NUTRIENT_KEYS,
   cleanText,
   emptyNutrients,
@@ -55,7 +56,7 @@ export interface RawItem {
  * match exists (filling gaps with the AI estimate), else from the AI estimate.
  */
 export async function resolveItem(raw: RawItem, usdaKey: string | undefined): Promise<FoodItem> {
-  const grams = Math.min(num(raw.grams), 5000);
+  const grams = Math.min(num(raw.grams), MAX_UNIT_GRAMS);
   const ai = sanitizeNutrients(raw.nutrients);
   const amount = cleanText(raw.amount, 80) || '1 serving';
   const unit = grams && !/\d\s*g\b/i.test(amount) ? `${amount} · ${fmtGrams(grams)}` : amount;

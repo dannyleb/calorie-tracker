@@ -1,6 +1,7 @@
 import { openDB, type DBSchema, type IDBPDatabase } from 'idb';
 import type { FoodItem } from '../../shared/types';
-import { sanitizeEntry, sanitizeSavedFood } from './backup';
+import { sanitizeEntry, sanitizeRecipe, sanitizeSavedFood } from './backup';
+import type { Recipe } from './recipes';
 import { tsForDate } from './dates';
 
 export interface Entry {
@@ -26,16 +27,21 @@ export interface SavedFood {
 interface Schema extends DBSchema {
   entries: { key: string; value: Entry; indexes: { date: string } };
   foods: { key: string; value: SavedFood };
+  recipes: { key: string; value: Recipe };
 }
 
 let dbPromise: Promise<IDBPDatabase<Schema>> | null = null;
 
 function db() {
-  dbPromise ??= openDB<Schema>('food-log', 1, {
-    upgrade(d) {
-      const entries = d.createObjectStore('entries', { keyPath: 'id' });
-      entries.createIndex('date', 'date');
-      d.createObjectStore('foods', { keyPath: 'key' });
+  // Version 2 added recipes. Upgrades only add stores; existing data is kept.
+  dbPromise ??= openDB<Schema>('food-log', 2, {
+    upgrade(d, oldVersion) {
+      if (oldVersion < 1) {
+        const entries = d.createObjectStore('entries', { keyPath: 'id' });
+        entries.createIndex('date', 'date');
+        d.createObjectStore('foods', { keyPath: 'key' });
+      }
+      if (oldVersion < 2) d.createObjectStore('recipes', { keyPath: 'id' });
     },
   });
   return dbPromise;
@@ -130,12 +136,30 @@ export async function countEntries(): Promise<number> {
   return (await db()).count('entries');
 }
 
+// ---- Recipes ----
+
+export async function allRecipes(): Promise<Recipe[]> {
+  const list = await (await db()).getAll('recipes');
+  return list.sort((a, b) => b.updatedAt - a.updatedAt);
+}
+
+export async function saveRecipe(r: Recipe): Promise<void> {
+  await (await db()).put('recipes', r);
+}
+
+export async function deleteRecipe(id: string): Promise<void> {
+  await (await db()).delete('recipes', id);
+}
+
+// ---- Backup ----
+
 export interface Backup {
   app: 'food-log';
   version: 1;
   exportedAt: string;
   entries: Entry[];
   foods: SavedFood[];
+  recipes?: Recipe[];
   settings?: unknown;
 }
 
@@ -147,6 +171,7 @@ export async function exportAll(settings: unknown): Promise<Backup> {
     exportedAt: new Date().toISOString(),
     entries: await d.getAll('entries'),
     foods: await d.getAll('foods'),
+    recipes: await d.getAll('recipes'),
     settings,
   };
 }
@@ -155,23 +180,26 @@ export async function exportAll(settings: unknown): Promise<Backup> {
  * Merge a backup into the current data (same ids are overwritten). Every record is
  * rebuilt from validated fields; malformed ones are skipped.
  */
-export async function importAll(b: Backup): Promise<{ imported: number; skipped: number }> {
+export async function importAll(b: Backup): Promise<{ imported: number; skipped: number; recipes: number }> {
   if (b?.app !== 'food-log' || !Array.isArray(b.entries)) throw new Error('This is not a Food Log backup file.');
   const entries = b.entries.map(sanitizeEntry).filter((e): e is Entry => e !== null);
   const foods = (Array.isArray(b.foods) ? b.foods : []).map(sanitizeSavedFood).filter((f): f is SavedFood => f !== null);
+  const recipes = (Array.isArray(b.recipes) ? b.recipes : []).map(sanitizeRecipe).filter((r): r is Recipe => r !== null);
   const d = await db();
-  const tx = d.transaction(['entries', 'foods'], 'readwrite');
+  const tx = d.transaction(['entries', 'foods', 'recipes'], 'readwrite');
   for (const e of entries) await tx.objectStore('entries').put(e);
   for (const f of foods) await tx.objectStore('foods').put(f);
+  for (const r of recipes) await tx.objectStore('recipes').put(r);
   await tx.done;
-  return { imported: entries.length, skipped: b.entries.length - entries.length };
+  return { imported: entries.length, skipped: b.entries.length - entries.length, recipes: recipes.length };
 }
 
 export async function eraseAll(): Promise<void> {
   const d = await db();
-  const tx = d.transaction(['entries', 'foods'], 'readwrite');
+  const tx = d.transaction(['entries', 'foods', 'recipes'], 'readwrite');
   await tx.objectStore('entries').clear();
   await tx.objectStore('foods').clear();
+  await tx.objectStore('recipes').clear();
   await tx.done;
 }
 
