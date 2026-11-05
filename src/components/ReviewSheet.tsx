@@ -41,7 +41,7 @@ export function ReviewSheet({
     ) : undefined;
 
   return (
-    <Sheet title={review.status === 'ready' ? 'Review' : 'Analyzing'} onClose={onClose} footer={footer}>
+    <Sheet title={review.status === 'ready' ? 'Review' : review.status === 'error' ? "Couldn't analyze" : 'Analyzing'} onClose={onClose} footer={footer}>
       {review.thumb && (
         <div class="thumb-wrap">
           <img class="thumb" src={review.thumb} alt="Your photo" />
