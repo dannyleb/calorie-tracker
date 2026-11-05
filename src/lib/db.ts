@@ -1,5 +1,6 @@
 import { openDB, type DBSchema, type IDBPDatabase } from 'idb';
 import type { FoodItem } from '../../shared/types';
+import { sanitizeEntry, sanitizeSavedFood } from './backup';
 import { tsForDate } from './dates';
 
 export interface Entry {
@@ -150,15 +151,20 @@ export async function exportAll(settings: unknown): Promise<Backup> {
   };
 }
 
-/** Merge a backup into the current data (same ids are overwritten). */
-export async function importAll(b: Backup): Promise<number> {
+/**
+ * Merge a backup into the current data (same ids are overwritten). Every record is
+ * rebuilt from validated fields; malformed ones are skipped.
+ */
+export async function importAll(b: Backup): Promise<{ imported: number; skipped: number }> {
   if (b?.app !== 'food-log' || !Array.isArray(b.entries)) throw new Error('This is not a Food Log backup file.');
+  const entries = b.entries.map(sanitizeEntry).filter((e): e is Entry => e !== null);
+  const foods = (Array.isArray(b.foods) ? b.foods : []).map(sanitizeSavedFood).filter((f): f is SavedFood => f !== null);
   const d = await db();
   const tx = d.transaction(['entries', 'foods'], 'readwrite');
-  for (const e of b.entries) if (e?.id && e.date && e.food) await tx.objectStore('entries').put(e);
-  for (const f of b.foods ?? []) if (f?.key && f.food) await tx.objectStore('foods').put(f);
+  for (const e of entries) await tx.objectStore('entries').put(e);
+  for (const f of foods) await tx.objectStore('foods').put(f);
   await tx.done;
-  return b.entries.length;
+  return { imported: entries.length, skipped: b.entries.length - entries.length };
 }
 
 export async function eraseAll(): Promise<void> {

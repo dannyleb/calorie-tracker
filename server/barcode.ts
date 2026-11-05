@@ -1,4 +1,4 @@
-import type { BarcodeResponse } from '../shared/types';
+import { sanitizeFood, type BarcodeResponse } from '../shared/types';
 import { foodFromFdc, foodFromOff } from './foods';
 import { HttpError, errorResponse, json, type Env } from './http';
 import { findOff } from './off';
@@ -12,7 +12,8 @@ export async function barcode(request: Request, env: Env): Promise<Response> {
     if (env.USDA_API_KEY) {
       try {
         const hit = await findBranded(code, env.USDA_API_KEY);
-        if (hit) return json({ found: true, code, food: foodFromFdc(hit) } satisfies BarcodeResponse);
+        const food = hit && sanitizeFood(foodFromFdc(hit));
+        if (food) return json({ found: true, code, food } satisfies BarcodeResponse);
       } catch (err) {
         console.warn('USDA barcode lookup failed', err);
       }
@@ -20,7 +21,8 @@ export async function barcode(request: Request, env: Env): Promise<Response> {
 
     try {
       const p = await findOff(code);
-      if (p) return json({ found: true, code, food: foodFromOff(p) } satisfies BarcodeResponse);
+      const food = p && sanitizeFood(foodFromOff(p));
+      if (food) return json({ found: true, code, food } satisfies BarcodeResponse);
     } catch (err) {
       console.warn('Open Food Facts lookup failed', err);
     }

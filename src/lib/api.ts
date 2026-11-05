@@ -1,4 +1,11 @@
-import type { AmountResponse, AnalyzeResponse, BarcodeResponse, FoodItem } from '../../shared/types';
+import {
+  cleanText,
+  sanitizeFood,
+  type AmountResponse,
+  type AnalyzeResponse,
+  type BarcodeResponse,
+  type FoodItem,
+} from '../../shared/types';
 import { loadSettings } from './settings';
 
 export class ApiError extends Error {
@@ -36,18 +43,35 @@ async function call<T>(path: string, init: RequestInit = {}): Promise<T> {
   return body as T;
 }
 
+// Server data is re-validated here before it is shown or saved (defense in depth).
+function cleanAnalyze(r: AnalyzeResponse): AnalyzeResponse {
+  return {
+    kind: r.kind,
+    note: cleanText(r.note, 300),
+    items: (Array.isArray(r.items) ? r.items : []).map(sanitizeFood).filter((f): f is FoodItem => f !== null),
+  };
+}
+
 export const analyzePhoto = (image: string, note?: string) =>
-  call<AnalyzeResponse>('/api/analyze', { method: 'POST', body: JSON.stringify({ image, text: note }) });
+  call<AnalyzeResponse>('/api/analyze', { method: 'POST', body: JSON.stringify({ image, text: note }) }).then(cleanAnalyze);
 
 export const analyzeText = (text: string) =>
-  call<AnalyzeResponse>('/api/analyze', { method: 'POST', body: JSON.stringify({ text }) });
+  call<AnalyzeResponse>('/api/analyze', { method: 'POST', body: JSON.stringify({ text }) }).then(cleanAnalyze);
 
-export const lookupBarcode = (code: string) => call<BarcodeResponse>(`/api/barcode?code=${encodeURIComponent(code)}`);
+export const lookupBarcode = (code: string) =>
+  call<BarcodeResponse>(`/api/barcode?code=${encodeURIComponent(code)}`).then((r) => {
+    const food = r.found ? sanitizeFood(r.food) : null;
+    return food ? { found: true, code, food } : { found: false, code };
+  });
 
 export const parseAmount = (food: FoodItem, text: string) =>
   call<AmountResponse>('/api/amount', {
     method: 'POST',
     body: JSON.stringify({ name: food.name, unit: food.unit, unitGrams: food.unitGrams, text }),
+  }).then((r) => {
+    const m = Number(r.multiplier);
+    if (!Number.isFinite(m) || m <= 0 || m > 100) throw new ApiError("Couldn't understand that amount.", 422);
+    return { multiplier: m, note: cleanText(r.note, 120) };
   });
 
 export const health = () => call<{ ok: boolean; model: string; anthropic: boolean; usda: boolean }>('/api/health');

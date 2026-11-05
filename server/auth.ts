@@ -2,6 +2,10 @@ import { json, type Env } from './http';
 
 // Every /api/* request must carry the passcode set in APP_PASSCODE.
 // This keeps strangers from spending your Anthropic credit if they find the URL.
+// Together with the per-IP rate limit (router.ts), a passcode of 12+ characters
+// can't practically be guessed.
+
+export const MIN_PASSCODE_LENGTH = 12;
 
 async function sha256(s: string): Promise<Uint8Array> {
   return new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s)));
@@ -20,7 +24,15 @@ export async function checkPasscode(request: Request, env: Env): Promise<Respons
   if (!expected) {
     return json({ error: 'Server not set up: add the APP_PASSCODE secret in Cloudflare.' }, 503);
   }
-  const given = request.headers.get('x-app-passcode') || '';
+  if (expected.length < MIN_PASSCODE_LENGTH) {
+    return json(
+      {
+        error: `APP_PASSCODE is too short to be safe. In Cloudflare, change it to at least ${MIN_PASSCODE_LENGTH} characters (3–4 random words works well), then enter the new one here.`,
+      },
+      503,
+    );
+  }
+  const given = (request.headers.get('x-app-passcode') || '').slice(0, 512);
   if (!(await safeEqual(given, expected))) {
     return json({ error: 'Wrong or missing passcode. Set it in Settings.' }, 401);
   }

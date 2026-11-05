@@ -68,13 +68,15 @@ export async function claudeJSON<T>(
       throw new HttpError(429, 'AI rate limit or spend limit reached. Try again shortly.');
     }
     if (err instanceof Anthropic.BadRequestError) {
-      throw new HttpError(502, `AI request rejected: ${err.message}`);
+      console.error('Claude rejected the request', err.status, err.requestID);
+      throw new HttpError(502, 'The AI service rejected the request. Try again, or try a different photo.');
     }
     if (err instanceof Anthropic.APIConnectionError) {
       throw new HttpError(504, 'Could not reach the AI service. Try again.');
     }
     if (err instanceof Anthropic.APIError) {
-      throw new HttpError(502, `AI service error (${err.status ?? 'unknown'}). Try again.`);
+      console.error('Claude API error', err.status, err.requestID);
+      throw new HttpError(502, 'The AI service had a problem. Try again.');
     }
     throw err;
   }

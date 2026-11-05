@@ -132,6 +132,7 @@ export function ItemEditor({
             inputMode="text"
             enterKeyHint="done"
             placeholder="Say or type an amount"
+            maxLength={100}
             value={text}
             onInput={(e) => setText((e.target as HTMLInputElement).value)}
             aria-label="Amount"

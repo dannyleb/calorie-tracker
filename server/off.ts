@@ -1,6 +1,7 @@
 // Open Food Facts (https://openfoodfacts.github.io/openfoodfacts-server/api/)
 // Free, crowd-sourced. Used as a backup when USDA has no match for a barcode.
 
+import { MAX_PER_100G, NUTRIENT_KEYS } from '../shared/types';
 import type { PartialNutrients } from './usda';
 import { codeVariants, stripZeros } from './usda';
 import { fetchWithTimeout } from './http';
@@ -50,6 +51,11 @@ export function offPer100g(p: OffProduct): PartialNutrients {
   const salt = n(m['salt_100g']);
   if (sodium !== undefined) out.sodium = sodium * 1000;
   else if (salt !== undefined) out.sodium = (salt / 2.5) * 1000;
+  // Crowd-sourced data: drop values that can't be real.
+  for (const k of NUTRIENT_KEYS) {
+    const v = out[k];
+    if (v !== undefined && !(v <= MAX_PER_100G[k])) delete out[k];
+  }
   return out;
 }
 

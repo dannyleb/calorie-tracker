@@ -40,7 +40,7 @@ Cloudflare's menus change from time to time, so these names may differ slightly.
    |---|---|
    | `ANTHROPIC_API_KEY` | your Anthropic key |
    | `USDA_API_KEY` | your USDA key |
-   | `APP_PASSCODE` | a long passcode you make up; the app sends it with every AI request so strangers can't use your key |
+   | `APP_PASSCODE` | a passcode you make up, **at least 12 characters** (3–4 random words works well). The app sends it with every AI request so strangers can't use your key |
    | `CLAUDE_MODEL` *(optional)* | defaults to `claude-opus-5-5` |
    | `CLAUDE_EFFORT` *(optional)* | `low` (default, fastest), `medium` or `high` |
 
@@ -70,6 +70,27 @@ Barcode scans that are found in the databases and "Recent" re-adds don't call th
 - Everything is stored in the app's storage on your phone (IndexedDB). Nothing leaves the phone except the photo, text or barcode number you're looking up.
 - **Deleting the home-screen icon deletes the data.** Use **Settings → Back up (JSON)** now and then and save it to Files. **Restore backup** brings it back.
 - A synced database is the next planned feature (see Roadmap).
+
+## Security
+
+**How it's protected**
+- **Passcode on every API request.** The server refuses to run with a passcode under 12 characters, and compares passcodes in constant time.
+- **Rate limit:** 30 API requests per minute per IP address, checked before the passcode. That makes guessing impractical and caps how fast a leaked passcode could spend AI credit.
+- **Keys stay on the server.** API keys live only in Cloudflare secrets, never in the app or the repo. The USDA key is sent in a header, so it never appears in URLs or logs.
+- **Browser protections on every response:** a strict Content Security Policy (only this site's own code can run; no inline scripts, no outside resources), no framing, HTTPS-only (HSTS plus a redirect), `nosniff`, no referrer.
+- **Untrusted data is cleaned.** AI output, USDA and Open Food Facts data, and restored backups are rebuilt from validated fields: text is length-capped with control characters removed, and nutrient numbers that can't be real are dropped. Nothing is ever inserted as HTML.
+- **CSV export is safe in spreadsheets.** Text that would run as a formula (starting with `=`, `+`, `-` or `@`) is neutralized.
+- **Photo privacy.** Photos are re-encoded on the phone before upload, which strips location (GPS) and other metadata.
+
+**Your checklist**
+- Use a passcode of 12+ characters, and don't share the app URL together with it.
+- Keep a monthly **spend limit** on your Anthropic account.
+- Turn on two-factor authentication for GitHub, Cloudflare and Anthropic. Anyone who can push to this repo's `main` branch can deploy code that uses your keys.
+
+**Known and accepted**
+- Food photos and descriptions are sent to Anthropic for analysis, under Anthropic's API data policy.
+- The log is stored on the phone without extra encryption. It's protected by your iPhone's passcode and device encryption.
+- `npm audit` reports moderate advisories in build-only dependencies of the offline-caching plugin (`workbox-build`: `glob`, `minimatch`, `deepmerge`). They only process this project's own files at build time and never ship to the phone. Production dependencies have no known advisories.
 
 ## Health note
 

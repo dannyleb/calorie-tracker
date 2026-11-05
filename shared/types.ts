@@ -90,9 +90,76 @@ export function num(v: unknown): number {
   return Number.isFinite(x) && x > 0 ? x : 0;
 }
 
+// ---- Sanitizing data from outside (AI, food databases, backup files) ----
+
+/** Highest believable value per 100 g. Anything above is bad data and treated as missing. */
+export const MAX_PER_100G: Record<NutrientKey, number> = {
+  calories: 900, // pure fat
+  protein: 100,
+  carbs: 100,
+  fat: 100,
+  satFat: 100,
+  transFat: 100,
+  cholesterol: 3500, // mg; brain ~3,000, egg yolk ~1,100
+  fiber: 100,
+  solubleFiber: 100,
+  sugar: 100,
+  sodium: 40000, // mg; table salt ~38,800
+};
+
+/** Highest believable value for one logged unit (a very large serving). */
+const MAX_PER_UNIT: Record<NutrientKey, number> = {
+  calories: 10000,
+  protein: 1000,
+  carbs: 1000,
+  fat: 1000,
+  satFat: 1000,
+  transFat: 1000,
+  cholesterol: 20000,
+  fiber: 1000,
+  solubleFiber: 1000,
+  sugar: 1000,
+  sodium: 100000,
+};
+
+/** Plain text: no control characters, trimmed, length-capped. */
+export function cleanText(v: unknown, max: number): string {
+  if (typeof v !== 'string') return '';
+  return v.replace(/[\u0000-\u001f\u007f-\u009f\u2028\u2029]+/g, ' ').trim().slice(0, max);
+}
+
 export function sanitizeNutrients(raw: Partial<Record<NutrientKey, unknown>> | undefined): Nutrients {
   const out = emptyNutrients();
-  if (!raw) return out;
-  for (const k of NUTRIENT_KEYS) out[k] = num(raw[k]);
+  if (!raw || typeof raw !== 'object') return out;
+  for (const k of NUTRIENT_KEYS) out[k] = Math.min(num(raw[k]), MAX_PER_UNIT[k]);
   return out;
+}
+
+const SOURCES: FoodSource[] = ['usda', 'label', 'barcode', 'ai'];
+const CONFIDENCE = ['high', 'medium', 'low'] as const;
+
+/** Rebuild a FoodItem from untrusted input, keeping only well-formed fields. Returns null if unusable. */
+export function sanitizeFood(raw: unknown): FoodItem | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const f = raw as Record<string, unknown>;
+  const name = cleanText(f.name, 100);
+  if (!name) return null;
+  const grams = Math.min(num(f.unitGrams), 5000);
+  const food: FoodItem = {
+    name,
+    unit: cleanText(f.unit, 120) || '1 serving',
+    unitGrams: grams || null,
+    perUnit: sanitizeNutrients(f.perUnit as Record<NutrientKey, unknown>),
+    source: SOURCES.includes(f.source as FoodSource) ? (f.source as FoodSource) : 'ai',
+  };
+  const brand = cleanText(f.brand, 80);
+  if (brand) food.brand = brand;
+  const detail = cleanText(f.sourceDetail, 200);
+  if (detail) food.sourceDetail = detail;
+  if (CONFIDENCE.includes(f.confidence as (typeof CONFIDENCE)[number])) food.confidence = f.confidence as FoodItem['confidence'];
+  if (Array.isArray(f.missing)) {
+    const missing = f.missing.filter((k): k is NutrientKey => NUTRIENT_KEYS.includes(k as NutrientKey));
+    if (missing.length) food.missing = [...new Set(missing)];
+  }
+  return food;
 }

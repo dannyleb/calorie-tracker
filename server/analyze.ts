@@ -1,5 +1,5 @@
 import type Anthropic from '@anthropic-ai/sdk';
-import type { AnalyzeResponse } from '../shared/types';
+import { cleanText, sanitizeFood, type AnalyzeResponse, type FoodItem } from '../shared/types';
 import { claudeJSON } from './claude';
 import { resolveItem, type RawItem } from './foods';
 import { HttpError, errorResponse, json, readJson, type Env } from './http';
@@ -84,21 +84,29 @@ note: one short sentence only when useful (e.g. "Portion is an estimate, adjust 
 const TEXT_PREFIX = `The user described what they ate, usually by voice dictation, so expect transcription errors. Quantities they state override typical portions. If they name a brand or restaurant item, estimate from what you know about it.\n\nWhat they said: `;
 
 interface Body {
-  image?: string; // base64 JPEG, no data: prefix
-  text?: string;
+  image?: unknown; // base64 JPEG, no data: prefix
+  text?: unknown;
 }
+
+const KINDS: AnalyzeResponse['kind'][] = ['food', 'nutrition_label', 'packaged_product', 'not_food'];
+// A 1280 px JPEG from the app is ~0.2-0.5 MB of base64; 4 MB leaves plenty of room.
+const MAX_BODY = 4_000_000;
 
 export async function analyze(request: Request, env: Env): Promise<Response> {
   try {
-    const body = await readJson<Body>(request, 8_000_000);
+    const body = await readJson<Body>(request, MAX_BODY);
+    const text = cleanText(body.text, 1000);
     const content: Anthropic.Beta.BetaContentBlockParam[] = [];
-    if (body.image) {
-      const data = body.image.replace(/^data:image\/\w+;base64,/, '');
-      if (!/^[A-Za-z0-9+/=]+$/.test(data.slice(0, 200))) throw new HttpError(400, 'Invalid image data.');
+    if (typeof body.image === 'string' && body.image) {
+      const data = body.image.replace(/^data:image\/jpeg;base64,/, '');
+      // Whole string must be base64 and decode to a JPEG (starts with FF D8 FF -> "/9j/").
+      if (!/^[A-Za-z0-9+/]+={0,2}$/.test(data) || !data.startsWith('/9j/')) {
+        throw new HttpError(400, 'Invalid image data.');
+      }
       content.push({ type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data } });
-      content.push({ type: 'text', text: body.text?.trim() ? `Extra context from the user: ${body.text.trim().slice(0, 500)}` : 'What is in this photo?' });
-    } else if (body.text?.trim()) {
-      content.push({ type: 'text', text: TEXT_PREFIX + body.text.trim().slice(0, 1000) });
+      content.push({ type: 'text', text: text ? `Extra context from the user: ${text.slice(0, 500)}` : 'What is in this photo?' });
+    } else if (text) {
+      content.push({ type: 'text', text: TEXT_PREFIX + text });
     } else {
       throw new HttpError(400, 'Send a photo or a description.');
     }
@@ -109,8 +117,14 @@ export async function analyze(request: Request, env: Env): Promise<Response> {
       schema: ANALYZE_SCHEMA,
     });
 
-    const items = await Promise.all((raw.items ?? []).slice(0, 12).map((it) => resolveItem(it, env.USDA_API_KEY)));
-    const result: AnalyzeResponse = { kind: raw.kind ?? 'food', note: raw.note ?? '', items };
+    const rawItems = Array.isArray(raw.items) ? raw.items.slice(0, 12) : [];
+    const resolved = await Promise.all(rawItems.map((it) => resolveItem(it, env.USDA_API_KEY)));
+    const items = resolved.map(sanitizeFood).filter((f): f is FoodItem => f !== null);
+    const result: AnalyzeResponse = {
+      kind: KINDS.includes(raw.kind) ? raw.kind : 'food',
+      note: cleanText(raw.note, 300),
+      items,
+    };
     return json(result);
   } catch (err) {
     return errorResponse(err);

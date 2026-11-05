@@ -1,7 +1,7 @@
 // USDA FoodData Central (https://fdc.nal.usda.gov/api-guide)
 // All FDC nutrient values in search results are per 100 g (or 100 ml).
 
-import { NUTRIENT_KEYS, type NutrientKey } from '../shared/types';
+import { MAX_PER_100G, NUTRIENT_KEYS, type NutrientKey } from '../shared/types';
 import { fetchWithTimeout } from './http';
 
 const SEARCH_URL = 'https://api.nal.usda.gov/fdc/v1/foods/search';
@@ -59,7 +59,8 @@ export function per100g(food: FdcFood): PartialNutrients {
     for (const num of NUTRIENT_NUMBERS[key]) {
       const v = byNumber.get(num);
       if (v !== undefined) {
-        out[key] = Math.max(0, v);
+        // Out-of-range values are bad data: leave the nutrient missing.
+        if (v >= 0 && v <= MAX_PER_100G[key]) out[key] = v;
         break;
       }
     }
@@ -68,9 +69,10 @@ export function per100g(food: FdcFood): PartialNutrients {
 }
 
 async function search(apiKey: string, body: Record<string, unknown>): Promise<FdcFood[]> {
-  const res = await fetchWithTimeout(`${SEARCH_URL}?api_key=${encodeURIComponent(apiKey)}`, {
+  // Key goes in a header (supported by api.data.gov) so it never appears in URLs or logs.
+  const res = await fetchWithTimeout(SEARCH_URL, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: { 'content-type': 'application/json', 'x-api-key': apiKey },
     body: JSON.stringify(body),
   });
   if (!res.ok) throw new Error(`USDA search failed: ${res.status}`);

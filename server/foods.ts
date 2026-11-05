@@ -1,5 +1,6 @@
 import {
   NUTRIENT_KEYS,
+  cleanText,
   emptyNutrients,
   num,
   sanitizeNutrients,
@@ -54,12 +55,12 @@ export interface RawItem {
  * match exists (filling gaps with the AI estimate), else from the AI estimate.
  */
 export async function resolveItem(raw: RawItem, usdaKey: string | undefined): Promise<FoodItem> {
-  const grams = num(raw.grams);
+  const grams = Math.min(num(raw.grams), 5000);
   const ai = sanitizeNutrients(raw.nutrients);
-  const amount = (raw.amount || '1 serving').trim();
+  const amount = cleanText(raw.amount, 80) || '1 serving';
   const unit = grams && !/\d\s*g\b/i.test(amount) ? `${amount} · ${fmtGrams(grams)}` : amount;
   const base = {
-    name: (raw.name || 'Food').trim(),
+    name: cleanText(raw.name, 100) || 'Food',
     unit,
     unitGrams: grams || null,
     confidence: raw.confidence,
@@ -69,7 +70,7 @@ export async function resolveItem(raw: RawItem, usdaKey: string | undefined): Pr
     return { ...base, perUnit: ai, source: 'label', sourceDetail: 'Read from the nutrition label' };
   }
 
-  const query = raw.usda_query?.trim();
+  const query = cleanText(raw.usda_query, 120);
   if (query && grams && usdaKey) {
     try {
       const hits = await searchGeneric(query, usdaKey);

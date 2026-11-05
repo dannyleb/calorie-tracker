@@ -13,6 +13,8 @@ export interface Env {
   ANTHROPIC_BASE_URL?: string;
   /** The built app (dist/), bound in wrangler.jsonc. */
   ASSETS: { fetch(request: Request): Promise<Response> };
+  /** Per-IP request limiter, bound in wrangler.jsonc. Optional so the app still runs without it. */
+  API_LIMITER?: { limit(options: { key: string }): Promise<{ success: boolean }> };
 }
 
 export class HttpError extends Error {
@@ -37,13 +39,40 @@ export function errorResponse(err: unknown): Response {
   return json({ error: 'Something went wrong on the server. Try again.' }, 500);
 }
 
+/**
+ * Read a JSON body, stopping as soon as it exceeds `maxBytes` (even when the
+ * client doesn't declare a size), and only for JSON content types.
+ */
 export async function readJson<T>(request: Request, maxBytes: number): Promise<T> {
-  const len = Number(request.headers.get('content-length') || 0);
-  if (len > maxBytes) throw new HttpError(413, 'That upload is too large.');
-  const text = await request.text();
-  if (text.length > maxBytes) throw new HttpError(413, 'That upload is too large.');
+  const type = request.headers.get('content-type') || '';
+  if (!type.toLowerCase().startsWith('application/json')) throw new HttpError(415, 'Expected JSON.');
+  const declared = Number(request.headers.get('content-length') || 0);
+  if (declared > maxBytes) throw new HttpError(413, 'That upload is too large.');
+  if (!request.body) throw new HttpError(400, 'Empty request body.');
+
+  const reader = request.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.byteLength;
+    if (total > maxBytes) {
+      await reader.cancel().catch(() => {});
+      throw new HttpError(413, 'That upload is too large.');
+    }
+    chunks.push(value);
+  }
+  const bytes = new Uint8Array(total);
+  let offset = 0;
+  for (const c of chunks) {
+    bytes.set(c, offset);
+    offset += c.byteLength;
+  }
   try {
-    return JSON.parse(text) as T;
+    const parsed: unknown = JSON.parse(new TextDecoder().decode(bytes));
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('not an object');
+    return parsed as T;
   } catch {
     throw new HttpError(400, 'Invalid request body.');
   }

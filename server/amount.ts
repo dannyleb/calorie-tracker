@@ -1,4 +1,4 @@
-import type { AmountResponse } from '../shared/types';
+import { cleanText, num, type AmountResponse } from '../shared/types';
 import { claudeJSON } from './claude';
 import { HttpError, errorResponse, json, readJson, type Env } from './http';
 
@@ -17,19 +17,20 @@ Return multiplier = (amount the user describes) / (reference portion). Use stand
 note: a few words showing the conversion, e.g. "1/2 cup ≈ 41 g". If the request is not an amount, return multiplier 1 and say so in note.`;
 
 interface Body {
-  name?: string;
-  unit?: string;
-  unitGrams?: number | null;
-  text?: string;
+  name?: unknown;
+  unit?: unknown;
+  unitGrams?: unknown;
+  text?: unknown;
 }
 
 export async function amount(request: Request, env: Env): Promise<Response> {
   try {
     const body = await readJson<Body>(request, 10_000);
-    const text = body.text?.trim().slice(0, 300);
+    const text = cleanText(body.text, 200);
     if (!text) throw new HttpError(400, 'Say or type an amount.');
-    const ref = `${body.name ?? 'Food'}, reference portion = ${body.unit ?? '1 serving'}${
-      body.unitGrams ? ` (${Math.round(body.unitGrams)} g)` : ''
+    const grams = Math.min(num(body.unitGrams), 5000);
+    const ref = `${cleanText(body.name, 100) || 'Food'}, reference portion = ${cleanText(body.unit, 120) || '1 serving'}${
+      grams ? ` (${Math.round(grams)} g)` : ''
     }`;
     const out = await claudeJSON<AmountResponse>(env, {
       system: SYSTEM,
@@ -38,7 +39,7 @@ export async function amount(request: Request, env: Env): Promise<Response> {
     });
     const m = Number(out.multiplier);
     if (!Number.isFinite(m) || m <= 0 || m > 100) throw new HttpError(422, "Couldn't understand that amount.");
-    return json({ multiplier: m, note: out.note ?? '' } satisfies AmountResponse);
+    return json({ multiplier: m, note: cleanText(out.note, 120) } satisfies AmountResponse);
   } catch (err) {
     return errorResponse(err);
   }

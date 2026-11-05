@@ -2,6 +2,8 @@ import { useEffect, useState } from 'preact/hooks';
 import { NUTRIENT_INFO, NUTRIENT_KEYS } from '../../shared/types';
 import { health } from '../lib/api';
 import { countEntries, entriesInRange, eraseAll, exportAll, importAll, type Backup } from '../lib/db';
+import { MAX_BACKUP_BYTES, sanitizeTargets } from '../lib/backup';
+import { csvRow } from '../lib/csv';
 import { describeAmount } from '../lib/format';
 import { DEFAULT_TARGETS, TARGET_DEFS, type Settings as SettingsT } from '../lib/settings';
 import { entryNutrients } from '../lib/stats';
@@ -26,11 +28,6 @@ async function shareOrDownload(name: string, type: string, content: string) {
   a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 5000);
 }
-
-const csvCell = (v: string | number) => {
-  const s = String(v);
-  return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-};
 
 export function Settings({
   settings,
@@ -78,7 +75,7 @@ export function Settings({
     const head = ['date', 'time', 'food', 'brand', 'amount', 'source', ...NUTRIENT_KEYS.map((k) => `${k}_${NUTRIENT_INFO[k].unit}`)];
     const rows = entries.map((e) => {
       const n = entryNutrients(e);
-      return [
+      return csvRow([
         e.date,
         new Date(e.ts).toTimeString().slice(0, 5),
         e.food.name,
@@ -86,11 +83,9 @@ export function Settings({
         describeAmount(e.food, e.qty),
         e.food.source,
         ...NUTRIENT_KEYS.map((k) => Math.round(n[k] * 10) / 10),
-      ]
-        .map(csvCell)
-        .join(',');
+      ]);
     });
-    await shareOrDownload(`food-log-${new Date().toISOString().slice(0, 10)}.csv`, 'text/csv', [head.join(','), ...rows].join('\n'));
+    await shareOrDownload(`food-log-${new Date().toISOString().slice(0, 10)}.csv`, 'text/csv', [csvRow(head), ...rows].join('\n'));
   }
 
   async function importFile(e: Event) {
@@ -98,12 +93,17 @@ export function Settings({
     const file = input.files?.[0];
     input.value = '';
     if (!file) return;
+    if (file.size > MAX_BACKUP_BYTES) {
+      notify('That file is too large to be a Food Log backup.', true);
+      return;
+    }
     try {
       const backup = JSON.parse(await file.text()) as Backup;
-      const n = await importAll(backup);
-      const s = backup.settings as Partial<SettingsT> | undefined;
-      if (s?.targets) onChange({ ...settings, targets: { ...settings.targets, ...s.targets } });
-      notify(`Restored ${n} entries.`);
+      const { imported, skipped } = await importAll(backup);
+      const s = backup.settings as { targets?: unknown } | undefined;
+      const targets = sanitizeTargets(s?.targets);
+      if (Object.keys(targets).length) onChange({ ...settings, targets: { ...settings.targets, ...targets } });
+      notify(`Restored ${imported} entries.${skipped ? ` Skipped ${skipped} damaged ones.` : ''}`);
       setCount(await countEntries());
       onDataChanged();
     } catch (err) {
@@ -144,9 +144,11 @@ export function Settings({
             autoComplete="current-password"
             value={passcode}
             placeholder="The APP_PASSCODE you set in Cloudflare"
+            maxLength={200}
             onInput={(e) => setPasscode((e.target as HTMLInputElement).value)}
           />
         </label>
+        <p class="hint">At least 12 characters. It must match APP_PASSCODE in Cloudflare.</p>
         <button class="primary-btn" onClick={saveAndTest}>
           Save and test
         </button>

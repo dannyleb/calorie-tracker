@@ -24,6 +24,7 @@ export function TextSheet({ onSubmit, onClose }: { onSubmit: (text: string) => v
         ref={ref}
         class="big-input"
         rows={4}
+        maxLength={1000}
         placeholder="e.g. two scrambled eggs, a slice of whole wheat toast with butter, and a coffee with milk"
         value={text}
         onInput={(e) => setText((e.target as HTMLTextAreaElement).value)}

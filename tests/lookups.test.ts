@@ -7,10 +7,10 @@ import { emptyNutrients } from '../shared/types';
 const nut = (nutrientNumber: string, value: number, unitName = 'G') => ({ nutrientNumber, value, unitName });
 
 function mockFetch(handler: (url: string, body: any) => unknown) {
-  const calls: { url: string; body: any }[] = [];
+  const calls: { url: string; body: any; headers: Record<string, string> }[] = [];
   vi.stubGlobal('fetch', async (url: string, init?: RequestInit) => {
     const body = init?.body ? JSON.parse(String(init.body)) : undefined;
-    calls.push({ url, body });
+    calls.push({ url, body, headers: (init?.headers ?? {}) as Record<string, string> });
     const out = handler(url, body);
     if (out === 404) return new Response('{}', { status: 404 });
     return new Response(JSON.stringify(out), { status: 200, headers: { 'content-type': 'application/json' } });
@@ -45,7 +45,8 @@ describe('USDA generic lookup', () => {
       ],
     }));
     const f = await resolveItem(ai, 'KEY');
-    expect(calls[0].url).toContain('api_key=KEY');
+    expect(calls[0].url).not.toContain('KEY'); // key never in the URL
+    expect(calls[0].headers['x-api-key']).toBe('KEY');
     expect(calls[0].body.query).toBe('Bananas, raw');
     expect(calls[0].body.dataType).toEqual(['Foundation', 'SR Legacy', 'Survey (FNDDS)']);
     expect(f.source).toBe('usda');
