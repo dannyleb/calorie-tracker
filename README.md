@@ -21,6 +21,12 @@ It's a web app you install to your home screen (a PWA). You don't need the App S
   - **Recent:** foods you've logged before.
 
   Set servings, and optionally the cooked weight of the finished dish so servings can be logged in grams. Nutrition per serving updates as you go, and recipes save automatically. Logged servings are a snapshot, so editing a recipe later doesn't change past days.
+- **Food memory (fewer AI calls):** answers you've confirmed are remembered on the phone and reused.
+  - **Barcodes:** once a product is identified, scanning it again is instant, with no AI call or database lookup.
+  - **Same phrase again:** "two eggs and toast" said again reuses your last confirmed answer, including any corrections you made.
+  - **Foods you've logged before** are recognized in what you say: "2 bananas", "half a cup of granola", "150 g greek yogurt". Only parts the app doesn't recognize go to the AI. Matching is deliberately strict: the full food name must match, and the amount must be unambiguous.
+  - **Spoken amounts** ("a big bowl") are remembered per food.
+  - Answers from memory say so and offer **"Ask AI instead"** if they're wrong. Settings shows how many AI calls were saved, with a button to clear the memory. Food photos without a barcode still need the AI every time; "Recent" is the free way to re-log those.
 - **Today:** calories plus heart-health meters (saturated fat, cholesterol, fiber with estimated soluble fiber, sodium) and macros. Use ‹ › to view or log past days.
 - **Trends:** week / month / quarter / year. Shows averages per logged day with change vs. the prior period, days over each limit, a bar chart with your target line, top food sources of any nutrient, and a totals table.
 - **Data:** stored only on your phone for now. Settings has backup (JSON), CSV export and restore.
@@ -69,7 +75,7 @@ You pay Anthropic per AI call; everything else is free. Rough estimate at ~10 ph
 | `claude-sonnet-5-5` | ~$0.01 | ~$3–5 |
 | `claude-haiku-5-5` | < $0.001 | < $1 |
 
-Barcode scans that are found in the databases and "Recent" re-adds don't call the AI at all. To switch models, change `CLAUDE_MODEL` in the Worker's Variables and Secrets.
+Barcode scans found in the food databases, "Recent" re-adds, and anything answered from food memory don't call the AI at all. To switch models, change `CLAUDE_MODEL` in the Worker's Variables and Secrets.
 
 ## Your data
 
@@ -120,7 +126,8 @@ npm run cf:dev                   # app + API at http://localhost:8787
 ```
 src/                 Phone app (Preact + TypeScript, ~22 KB gzipped)
   components/        Today, Trends, Settings, review/edit sheets, bar chart
-  lib/               IndexedDB storage, image resizing, barcode detection, stats
+  lib/               IndexedDB storage, image resizing, barcode detection, stats,
+                     food memory (memory.ts), phrase matching (matcher.ts, smart.ts)
 worker/index.ts      Cloudflare Worker entry: /api/* → server, everything else → the app
 server/              API code
   router.ts          Passcode check, then routes /api/* requests

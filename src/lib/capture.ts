@@ -2,13 +2,16 @@ import type { AnalyzeMode, FoodItem } from '../../shared/types';
 import { analyzePhoto, lookupBarcode } from './api';
 import { detectBarcode } from './barcode';
 import { blobToBase64, canvasToBlob, drawScaled, loadImage } from './image';
+import { countSavedCall, recallBarcode } from './memory';
 
 export interface PhotoResult {
   items: FoodItem[];
   note: string;
   thumb: string;
-  /** Set when the food came from a barcode lookup (one serving of a product). */
+  /** The barcode seen in the photo, if any (so the result can be remembered). */
   barcode?: string;
+  /** True when the answer came from food memory instead of a lookup or AI. */
+  fromMemory?: boolean;
   recipeName?: string;
   servings?: number;
 }
@@ -21,6 +24,7 @@ export async function identifyPhoto(
   file: File,
   mode: AnalyzeMode,
   progress: (message: string, thumb?: string) => void,
+  opts: { skipMemory?: boolean } = {},
 ): Promise<PhotoResult> {
   progress('Reading photo…');
   const img = await loadImage(file);
@@ -31,6 +35,14 @@ export async function identifyPhoto(
 
   let note = '';
   const code = await detectBarcode(drawScaled(img, 2000)).catch(() => null);
+  if (code && !opts.skipMemory) {
+    const known = await recallBarcode(code);
+    if (known) {
+      // Only products the AI identified would have cost an AI call.
+      if (known.source !== 'barcode') countSavedCall();
+      return { items: [known], note: `Barcode ${code}: remembered from an earlier scan. No lookup needed.`, thumb, barcode: code, fromMemory: true };
+    }
+  }
   if (code) {
     progress(`Looking up barcode ${code}…`, thumb);
     const r = await lookupBarcode(code);
@@ -44,6 +56,7 @@ export async function identifyPhoto(
     items: res.items,
     note: [note, res.note].filter(Boolean).join(' '),
     thumb,
+    barcode: code ?? undefined,
     recipeName: res.recipeName,
     servings: res.servings,
   };

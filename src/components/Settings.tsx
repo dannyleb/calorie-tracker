@@ -5,6 +5,7 @@ import { countEntries, entriesInRange, eraseAll, exportAll, importAll, type Back
 import { MAX_BACKUP_BYTES, sanitizeTargets } from '../lib/backup';
 import { csvRow } from '../lib/csv';
 import { describeAmount } from '../lib/format';
+import { clearMemory, memorySize, savedCalls } from '../lib/memory';
 import { DEFAULT_TARGETS, TARGET_DEFS, type Settings as SettingsT } from '../lib/settings';
 import { entryNutrients } from '../lib/stats';
 
@@ -43,11 +44,13 @@ export function Settings({
   const [passcode, setPasscode] = useState(settings.passcode);
   const [status, setStatus] = useState('');
   const [count, setCount] = useState<number | null>(null);
+  const [memory, setMemory] = useState<{ size: number; saved: number } | null>(null);
   const standalone =
     window.matchMedia?.('(display-mode: standalone)').matches || (navigator as any).standalone === true;
 
   useEffect(() => {
     countEntries().then(setCount);
+    memorySize().then((size) => setMemory({ size, saved: savedCalls() }));
   }, []);
 
   async function saveAndTest() {
@@ -202,6 +205,39 @@ export function Settings({
             Erase all data
           </button>
         </div>
+      </section>
+
+      <section class="card">
+        <h3 class="section-label">Food memory</h3>
+        <p class="hint">
+          Barcodes, phrases and amounts you've confirmed are remembered on this phone. When you scan or say them again, the app
+          answers from memory instead of calling the AI. Foods you've logged before are also recognized in what you say, e.g. "2
+          slices of toast and a banana". Food photos without a barcode still need the AI.
+        </p>
+        {memory && (
+          <div class="memory-stats">
+            <div>
+              <strong>{memory.saved.toLocaleString()}</strong>
+              <span class="muted">AI calls saved (about ${(memory.saved * 0.02).toFixed(2)})</span>
+            </div>
+            <div>
+              <strong>{memory.size.toLocaleString()}</strong>
+              <span class="muted">things remembered</span>
+            </div>
+          </div>
+        )}
+        <button
+          class="secondary-btn"
+          disabled={!memory?.size}
+          onClick={async () => {
+            if (!confirm('Forget remembered barcodes, phrases and amounts? Your log, foods and recipes are not affected.')) return;
+            await clearMemory();
+            setMemory({ size: 0, saved: savedCalls() });
+            notify('Food memory cleared.');
+          }}
+        >
+          Clear memory
+        </button>
       </section>
 
       <p class="footnote muted">

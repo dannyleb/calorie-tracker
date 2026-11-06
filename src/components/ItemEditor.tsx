@@ -2,6 +2,7 @@ import { useState } from 'preact/hooks';
 import { scaleNutrients, type FoodItem, type NutrientKey } from '../../shared/types';
 import { parseAmountLocal } from '../lib/amount';
 import { parseAmount } from '../lib/api';
+import { countSavedCall, recallAmount, rememberAmount } from '../lib/memory';
 import { SOURCE_LABEL, describeAmount, fmtQty, fmtValue } from '../lib/format';
 import { Icon } from './Icon';
 
@@ -71,8 +72,17 @@ export function ItemEditor({
     setBusy(true);
     setNote('Working out the amount…');
     try {
+      const known = await recallAmount(food, t);
+      if (known) {
+        countSavedCall();
+        onQty(known);
+        setNote(`"${t}" — remembered from last time.`);
+        setText('');
+        return;
+      }
       const r = await parseAmount(food, t);
       onQty(r.multiplier);
+      rememberAmount(food, t, r.multiplier);
       setNote(r.note);
       setText('');
     } catch (err) {

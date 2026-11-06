@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
 import type { FoodItem } from '../../shared/types';
-import { analyzeText } from '../lib/api';
+import { rememberBarcode, rememberText } from '../lib/memory';
+import { analyzeTextSmart, type AnswerSource } from '../lib/smart';
 import { identifyPhoto } from '../lib/capture';
 import { deleteRecipe, newId, saveRecipe } from '../lib/db';
 import { describeAmount, fmtQty, fmtValue } from '../lib/format';
@@ -52,6 +53,8 @@ export function RecipeEditor({
   const [note, setNote] = useState('');
   const [fresh, setFresh] = useState<Set<string>>(new Set());
   const [logQty, setLogQty] = useState(1);
+  /** The last dictated batch, so a remembered answer can be redone with AI. */
+  const [lastSaid, setLastSaid] = useState<{ text: string; ids: string[]; source: AnswerSource } | null>(null);
   const [saved, setSaved] = useState(true);
   const servingsTouched = useRef(initial.ingredients.length > 0 || initial.servings !== DEFAULT_SERVINGS);
   const latest = useRef(r);
@@ -78,8 +81,11 @@ export function RecipeEditor({
 
   const update = (patch: Partial<Recipe>) => setR((prev) => ({ ...prev, ...patch, updatedAt: Date.now() }));
 
-  function addFoods(foods: FoodItem[], meta: { recipeName?: string; servings?: number; note?: string } = {}) {
-    const added: Ingredient[] = foods.map((food) => ({ id: newId(), food, qty: 1 }));
+  function addFoods(
+    items: { food: FoodItem; qty: number }[],
+    meta: { recipeName?: string; servings?: number; note?: string } = {},
+  ) {
+    const added: Ingredient[] = items.map(({ food, qty }) => ({ id: newId(), food, qty }));
     setR((prev) => {
       const next: Recipe = { ...prev, ingredients: [...prev.ingredients, ...added], updatedAt: Date.now() };
       if (!prev.name.trim() && meta.recipeName) next.name = meta.recipeName;
@@ -89,20 +95,25 @@ export function RecipeEditor({
     if (meta.servings) servingsTouched.current = true;
     setFresh(new Set(added.map((a) => a.id)));
     setNote(meta.note ?? '');
+    setLastSaid(null);
     return added;
   }
 
-  async function onSay(text: string) {
+  async function onSay(text: string, force = false) {
     const id = ++job.current;
-    setSheet({ type: 'working', message: 'Working out ingredients…' });
+    setSheet({ type: 'working', message: force ? 'Asking AI…' : 'Working out ingredients…' });
     try {
-      const res = await analyzeText(text, 'recipe');
+      const res = await analyzeTextSmart(text, 'recipe', force);
       if (job.current !== id) return;
       if (!res.items.length) {
         setSheet({ type: 'error', message: res.note || "Couldn't find any ingredients in that. Try listing them with amounts." });
         return;
       }
-      addFoods(res.items, { recipeName: res.recipeName, servings: res.servings, note: res.note });
+      const added = addFoods(res.items, { recipeName: res.recipeName, servings: res.servings, note: res.note });
+      setLastSaid({ text, ids: added.map((a) => a.id), source: res.source });
+      if (res.source !== 'memory') {
+        rememberText('recipe', text, { items: res.items, note: '', recipeName: res.recipeName, servings: res.servings });
+      }
       setSheet(null);
       toast({ message: `Added ${res.items.length} ingredient${res.items.length === 1 ? '' : 's'}` });
     } catch (err) {
@@ -127,9 +138,13 @@ export function RecipeEditor({
         setSheet({ type: 'error', message: res.note || 'No ingredient found in that photo.', thumb });
         return;
       }
-      const added = addFoods(res.items, { recipeName: res.recipeName, servings: res.servings, note: res.note });
+      const added = addFoods(
+        res.items.map((food) => ({ food, qty: 1 })),
+        { recipeName: res.recipeName, servings: res.servings, note: res.note },
+      );
       // A single product (barcode or label) is one serving: ask how much the recipe uses.
       const one = added.length === 1 ? added[0] : null;
+      if (one && res.barcode) rememberBarcode(res.barcode, one.food);
       if (one && (res.barcode || one.food.source === 'label' || one.food.source === 'barcode')) {
         setSheet({ type: 'ingredient', id: one.id, hint: 'How much does the recipe use? Say or type it, e.g. "2 cups" or "500 g".' });
       } else {
@@ -239,6 +254,18 @@ export function RecipeEditor({
           Ingredients{r.ingredients.length ? ` (${r.ingredients.length})` : ''}
         </h3>
         {note && <p class="hint">{note}</p>}
+        {lastSaid && lastSaid.source !== 'ai' && (
+          <button
+            class="link-btn"
+            onClick={() => {
+              const { text, ids } = lastSaid;
+              update({ ingredients: latest.current.ingredients.filter((i) => !ids.includes(i.id)) });
+              onSay(text, true);
+            }}
+          >
+            Not right? Ask AI instead
+          </button>
+        )}
         {r.ingredients.length === 0 ? (
           <div class="empty">
             Tap <b>Say ingredients</b> and list everything with amounts:
@@ -359,7 +386,7 @@ export function RecipeEditor({
           hint="Tap foods to add them as ingredients, then set amounts."
           onClose={closeSheet}
           onPick={(f) => {
-            addFoods([f.food]);
+            addFoods([{ food: f.food, qty: 1 }]);
             toast({ message: `Added ${f.food.name}` });
           }}
         />

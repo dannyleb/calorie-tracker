@@ -24,17 +24,27 @@ export interface SavedFood {
   favorite: boolean;
 }
 
+/** A remembered answer (barcode, phrase or amount) that saves an AI call next time. */
+export interface MemoryRecord {
+  key: string;
+  value: unknown;
+  createdAt: number;
+  lastUsed: number;
+  hits: number;
+}
+
 interface Schema extends DBSchema {
   entries: { key: string; value: Entry; indexes: { date: string } };
   foods: { key: string; value: SavedFood };
   recipes: { key: string; value: Recipe };
+  memory: { key: string; value: MemoryRecord; indexes: { lastUsed: number } };
 }
 
 let dbPromise: Promise<IDBPDatabase<Schema>> | null = null;
 
-function db() {
-  // Version 2 added recipes. Upgrades only add stores; existing data is kept.
-  dbPromise ??= openDB<Schema>('food-log', 2, {
+export function db() {
+  // v2 added recipes, v3 added memory. Upgrades only add stores; existing data is kept.
+  dbPromise ??= openDB<Schema>('food-log', 3, {
     upgrade(d, oldVersion) {
       if (oldVersion < 1) {
         const entries = d.createObjectStore('entries', { keyPath: 'id' });
@@ -42,9 +52,15 @@ function db() {
         d.createObjectStore('foods', { keyPath: 'key' });
       }
       if (oldVersion < 2) d.createObjectStore('recipes', { keyPath: 'id' });
+      if (oldVersion < 3) d.createObjectStore('memory', { keyPath: 'key' }).createIndex('lastUsed', 'lastUsed');
     },
   });
   return dbPromise;
+}
+
+/** For tests: forget the open connection so the next call reopens the database. */
+export function resetDbForTests() {
+  dbPromise = null;
 }
 
 export const newId = () =>
@@ -196,10 +212,11 @@ export async function importAll(b: Backup): Promise<{ imported: number; skipped:
 
 export async function eraseAll(): Promise<void> {
   const d = await db();
-  const tx = d.transaction(['entries', 'foods', 'recipes'], 'readwrite');
+  const tx = d.transaction(['entries', 'foods', 'recipes', 'memory'], 'readwrite');
   await tx.objectStore('entries').clear();
   await tx.objectStore('foods').clear();
   await tx.objectStore('recipes').clear();
+  await tx.objectStore('memory').clear();
   await tx.done;
 }
 

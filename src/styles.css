@@ -972,6 +972,16 @@ h3 {
   margin: 8px 0 2px;
 }
 
+/* Inline text button, e.g. "Ask AI instead" */
+.link-btn {
+  background: none;
+  border: 0;
+  padding: 4px 0 8px;
+  color: var(--accent-ink);
+  font-size: 14px;
+  font-weight: 600;
+}
+
 /* ---------- Recent ---------- */
 
 .search {
@@ -1334,6 +1344,30 @@ h3 {
 }
 
 /* ---------- Settings ---------- */
+
+.memory-stats {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin: 8px 0 14px;
+}
+
+.memory-stats > div {
+  display: flex;
+  flex-direction: column;
+  background: var(--page);
+  border-radius: 12px;
+  padding: 10px 12px;
+}
+
+.memory-stats strong {
+  font-size: 22px;
+  font-weight: 650;
+}
+
+.memory-stats span {
+  font-size: 12px;
+}
 
 .field {
   display: grid;

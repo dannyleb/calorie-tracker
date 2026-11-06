@@ -1,16 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from 'preact/hooks';
-import type { FoodItem } from '../shared/types';
 import { EditSheet } from './components/EditSheet';
 import { Icon } from './components/Icon';
 import { RecentSheet } from './components/RecentSheet';
 import { Recipes } from './components/Recipes';
-import { ReviewSheet, type ReviewState } from './components/ReviewSheet';
+import { ReviewSheet, type ReviewItem, type ReviewState } from './components/ReviewSheet';
 import { Settings } from './components/Settings';
 import { TextSheet } from './components/TextSheet';
 import { Toast, type ToastState } from './components/Toast';
 import { Today } from './components/Today';
 import { Trends } from './components/Trends';
-import { analyzeText } from './lib/api';
 import { identifyPhoto } from './lib/capture';
 import { dayLabel, todayKey } from './lib/dates';
 import {
@@ -24,13 +22,22 @@ import {
   type SavedFood,
 } from './lib/db';
 import { fmtQty } from './lib/format';
+import { rememberBarcode, rememberText } from './lib/memory';
 import { recipeName, recipeServingFood, type Recipe } from './lib/recipes';
 import { loadSettings, saveSettings, type Settings as SettingsT } from './lib/settings';
+import { analyzeTextSmart } from './lib/smart';
 
 type Tab = 'today' | 'recipes' | 'trends' | 'settings';
+
+/** Where a review came from, so a confirmed answer can be remembered (or redone with AI). */
+interface ReviewContext {
+  text?: string;
+  file?: File;
+  barcode?: string;
+}
 type SheetState =
   | null
-  | { type: 'review'; id: number; review: ReviewState }
+  | { type: 'review'; id: number; review: ReviewState; ctx: ReviewContext }
   | { type: 'text' }
   | { type: 'recent'; recipes: Recipe[] }
   | { type: 'edit'; entry: Entry };
@@ -79,8 +86,13 @@ export function App() {
 
   // ---- Logging flows ----
 
-  async function addItems(items: { food: FoodItem; qty: number }[]) {
+  async function addItems(items: ReviewItem[]) {
+    const ctx = sheet?.type === 'review' ? sheet.ctx : {};
     const ids = await logFoods(items, date);
+    // Remember what was confirmed (with any corrections) so repeats skip the AI.
+    const confirmed = items.map(({ food, qty }) => ({ food, qty }));
+    if (ctx.text) rememberText('log', ctx.text, { items: confirmed, note: '' });
+    if (ctx.barcode && confirmed.length === 1) rememberBarcode(ctx.barcode, confirmed[0].food);
     setSheet(null);
     refresh();
     setToast({
@@ -94,28 +106,42 @@ export function App() {
     });
   }
 
-  async function onPhoto(file: File) {
+  async function onPhoto(file: File, skipMemory = false) {
     const id = ++job.current;
-    const show = (review: ReviewState) => job.current === id && setSheet({ type: 'review', id, review });
+    const ctx: ReviewContext = { file };
+    const show = (review: ReviewState) => job.current === id && setSheet({ type: 'review', id, review, ctx });
     let thumb: string | undefined;
     try {
-      const res = await identifyPhoto(file, 'log', (message, t) => {
-        thumb = t ?? thumb;
-        show({ status: 'working', message, thumb });
+      const res = await identifyPhoto(
+        file,
+        'log',
+        (message, t) => {
+          thumb = t ?? thumb;
+          show({ status: 'working', message, thumb });
+        },
+        { skipMemory },
+      );
+      ctx.barcode = res.barcode;
+      show({
+        status: 'ready',
+        thumb: res.thumb,
+        note: res.note,
+        items: res.items.map((food) => ({ food, qty: 1 })),
+        fromMemory: res.fromMemory,
       });
-      show({ status: 'ready', thumb: res.thumb, note: res.note, items: res.items });
     } catch (err) {
       show({ status: 'error', thumb, message: (err as Error).message || 'Something went wrong.' });
     }
   }
 
-  async function onText(text: string) {
+  async function onText(text: string, force = false) {
     const id = ++job.current;
-    const show = (review: ReviewState) => job.current === id && setSheet({ type: 'review', id, review });
-    show({ status: 'working', message: 'Working it out…' });
+    const ctx: ReviewContext = { text };
+    const show = (review: ReviewState) => job.current === id && setSheet({ type: 'review', id, review, ctx });
+    show({ status: 'working', message: force ? 'Asking AI…' : 'Working it out…' });
     try {
-      const res = await analyzeText(text);
-      show({ status: 'ready', note: res.note, items: res.items });
+      const res = await analyzeTextSmart(text, 'log', force);
+      show({ status: 'ready', note: res.note, items: res.items, fromMemory: res.source !== 'ai' });
     } catch (err) {
       show({ status: 'error', message: (err as Error).message });
     }
@@ -230,6 +256,11 @@ export function App() {
           onAdd={addItems}
           onClose={closeSheet}
           onTypeInstead={() => setSheet({ type: 'text' })}
+          onAskAI={() => {
+            const { text, file } = sheet.ctx;
+            if (text) onText(text, true);
+            else if (file) onPhoto(file, true);
+          }}
         />
       )}
       {sheet?.type === 'text' && <TextSheet onSubmit={onText} onClose={closeSheet} />}
